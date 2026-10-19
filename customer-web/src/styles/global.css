@@ -1,0 +1,44 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #f7f8fa;
+  color: #323233;
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* PC 上预览时把移动端页面居中，宽度与主流机型一致 */
+.app-shell {
+  max-width: 750px;
+  min-height: 100vh;
+  margin: 0 auto;
+  background: #f7f8fa;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+/* 底部固定条与内容区等宽居中，避免 PC 预览时横跨整个窗口 */
+.van-tabbar,
+.van-action-bar,
+.van-submit-bar {
+  right: auto;
+  left: 50%;
+  max-width: 750px;
+  transform: translateX(-50%);
+}
+
+/* 页面内的操作条叠在 TabBar 之上，两者都可见 */
+.van-action-bar,
+.van-submit-bar {
+  bottom: var(--van-tabbar-height, 50px);
+  z-index: 10;
+}

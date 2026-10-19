@@ -1,0 +1,454 @@
+{
+  "info": {
+    "name": "system-cookies · 后台管理",
+    "_postman_id": "f3a8b1c0-2026-4e1f-9b0a-systemcookies-admin",
+    "description": "食谱点菜系统 - 后台管理接口集合（订单 / 食谱 / 分类）。所有 `/api/admin/**` 接口均需管理员登录，集合级 Bearer Token 鉴权。配套文档：docs/admin-api.md",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{token}}", "type": "string" }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8088",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string",
+      "description": "管理员登录后从 /api/auth/login 响应中获取的 token"
+    }
+  ],
+  "item": [
+    {
+      "name": "订单管理",
+      "item": [
+        {
+          "name": "订单分页查询",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/orders?pageNum=1&pageSize=10&userId=&status=&keyword=",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "orders"],
+              "query": [
+                { "key": "pageNum", "value": "1", "description": "当前页，默认 1" },
+                { "key": "pageSize", "value": "10", "description": "每页条数，默认 10" },
+                { "key": "userId", "value": "", "description": "用户 ID；不传 = 查全部" },
+                { "key": "status", "value": "", "description": "0待支付 1待制作 2制作中 3已完成 4已取消" },
+                { "key": "keyword", "value": "", "description": "订单号关键字（模糊匹配）" }
+              ]
+            },
+            "description": "订单分页（不传 userId 表示查全部用户）"
+          },
+          "response": [
+            {
+              "name": "成功示例",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"code\": 200,\n  \"message\": \"操作成功\",\n  \"data\": {\n    \"records\": [\n      {\n        \"id\": 1024,\n        \"orderNo\": \"SC202603120001\",\n        \"userId\": 8,\n        \"totalAmount\": 88.00,\n        \"payAmount\": 88.00,\n        \"itemCount\": 2,\n        \"status\": 1,\n        \"statusText\": \"待制作\",\n        \"contactName\": \"张三\",\n        \"contactPhone\": \"13800000000\",\n        \"address\": \"阳光小区 3-2-301\",\n        \"remark\": \"少辣\",\n        \"createTime\": \"2026-03-12 12:00:00\",\n        \"updateTime\": \"2026-03-12 12:01:00\"\n      }\n    ],\n    \"total\": 1,\n    \"pageNum\": 1,\n    \"pageSize\": 10,\n    \"pages\": 1\n  },\n  \"timestamp\": 1718000000000\n}"
+            }
+          ]
+        },
+        {
+          "name": "订单详情",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/orders/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "orders", ":id"],
+              "variable": [
+                { "key": "id", "value": "1024", "description": "订单 ID" }
+              ]
+            },
+            "description": "订单详情（含订单项）"
+          },
+          "response": [
+            {
+              "name": "成功示例",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"code\": 200,\n  \"message\": \"操作成功\",\n  \"data\": {\n    \"id\": 1024,\n    \"orderNo\": \"SC202603120001\",\n    \"userId\": 8,\n    \"totalAmount\": 88.00,\n    \"payAmount\": 88.00,\n    \"itemCount\": 2,\n    \"status\": 1,\n    \"statusText\": \"待制作\",\n    \"contactName\": \"张三\",\n    \"contactPhone\": \"13800000000\",\n    \"address\": \"阳光小区 3-2-301\",\n    \"remark\": \"少辣\",\n    \"items\": [\n      {\n        \"id\": 501,\n        \"orderId\": 1024,\n        \"recipeId\": 7,\n        \"recipeName\": \"番茄炒蛋\",\n        \"coverUrl\": \"https://.../fqcd.jpg\",\n        \"price\": 28.00,\n        \"quantity\": 2\n      }\n    ]\n  },\n  \"timestamp\": 1718000000000\n}"
+            }
+          ]
+        },
+        {
+          "name": "推进订单状态",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Accept", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/orders/:id/status?status=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "orders", ":id", "status"],
+              "variable": [
+                { "key": "id", "value": "1024", "description": "订单 ID" }
+              ],
+              "query": [
+                { "key": "status", "value": "1", "description": "0待支付 1待制作 2制作中 3已完成 4已取消" }
+              ]
+            },
+            "description": "推进订单状态。仅非「已完成 / 已取消」订单允许继续推进，否则业务异常 500。"
+          },
+          "response": [
+            {
+              "name": "成功示例",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"code\": 200,\n  \"message\": \"操作成功\",\n  \"data\": null,\n  \"timestamp\": 1718000000000\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "食谱管理",
+      "item": [
+        {
+          "name": "食谱分页",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/recipes?pageNum=1&pageSize=10&keyword=&categoryId=&difficulty=&onSaleOnly=false&orderBy=default",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "recipes"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "10" },
+                { "key": "keyword", "value": "", "description": "菜名 / 副标题 / 简介 / 菜系 模糊匹配" },
+                { "key": "categoryId", "value": "" },
+                { "key": "taste", "value": "" },
+                { "key": "cookMethod", "value": "" },
+                { "key": "difficulty", "value": "", "description": "1简单 2中等 3困难" },
+                { "key": "minPrice", "value": "" },
+                { "key": "maxPrice", "value": "" },
+                { "key": "recommendOnly", "value": "" },
+                { "key": "onSaleOnly", "value": "false", "description": "管理端可传 false 同时看上下架" },
+                { "key": "orderBy", "value": "default", "description": "default / sales / priceAsc / priceDesc / time / newest" }
+              ]
+            },
+            "description": "食谱分页（默认含下架，可 onSaleOnly=true 只看上架）"
+          },
+          "response": [
+            {
+              "name": "成功示例",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"code\": 200,\n  \"message\": \"操作成功\",\n  \"data\": {\n    \"records\": [\n      {\n        \"id\": 7,\n        \"categoryId\": 3,\n        \"categoryName\": \"家常菜\",\n        \"name\": \"番茄炒蛋\",\n        \"subtitle\": \"国民下饭菜\",\n        \"coverUrl\": \"https://.../fqcd.jpg\",\n        \"description\": \"酸甜开胃，5 分钟出锅\",\n        \"cuisine\": \"川菜\",\n        \"taste\": \"酸甜\",\n        \"cookMethod\": \"炒\",\n        \"difficulty\": 1,\n        \"cookTime\": 5,\n        \"servings\": 2,\n        \"calories\": 320,\n        \"price\": 28.00,\n        \"originalPrice\": 32.00,\n        \"stock\": 50,\n        \"sales\": 128,\n        \"isRecommend\": 1,\n        \"status\": 1,\n        \"stepCount\": 5,\n        \"createTime\": \"2026-02-01 10:00:00\",\n        \"updateTime\": \"2026-03-01 10:00:00\"\n      }\n    ],\n    \"total\": 1,\n    \"pageNum\": 1,\n    \"pageSize\": 10,\n    \"pages\": 1\n  },\n  \"timestamp\": 1718000000000\n}"
+            }
+          ]
+        },
+        {
+          "name": "食谱详情",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/recipes/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "recipes", ":id"],
+              "variable": [
+                { "key": "id", "value": "7", "description": "食谱 ID" }
+              ]
+            },
+            "description": "食谱详情（含下架，供编辑回填）"
+          },
+          "response": [
+            {
+              "name": "成功示例",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"code\": 200,\n  \"message\": \"操作成功\",\n  \"data\": {\n    \"id\": 7,\n    \"categoryId\": 3,\n    \"categoryName\": \"家常菜\",\n    \"name\": \"番茄炒蛋\",\n    \"subtitle\": \"国民下饭菜\",\n    \"coverUrl\": \"https://.../fqcd.jpg\",\n    \"description\": \"酸甜开胃，5 分钟出锅\",\n    \"cuisine\": \"川菜\",\n    \"taste\": \"酸甜\",\n    \"cookMethod\": \"炒\",\n    \"difficulty\": 1,\n    \"cookTime\": 5,\n    \"servings\": 2,\n    \"calories\": 320,\n    \"price\": 28.00,\n    \"originalPrice\": 32.00,\n    \"stock\": 50,\n    \"sales\": 128,\n    \"isRecommend\": 1,\n    \"status\": 1,\n    \"steps\": [\n      { \"id\": 11, \"recipeId\": 7, \"stepNo\": 1, \"title\": \"备料\", \"content\": \"番茄切块、鸡蛋打散\", \"imageUrl\": null, \"duration\": 2, \"tip\": \"番茄去皮口感更好\" }\n    ],\n    \"ingredients\": [\n      { \"id\": 21, \"recipeId\": 7, \"name\": \"番茄\", \"amount\": \"2 个\", \"unit\": \"个\", \"isMain\": 1, \"note\": \"熟透的更甜\", \"sort\": 1 }\n    ],\n    \"seasonings\": [\n      { \"id\": 31, \"recipeId\": 7, \"name\": \"盐\", \"amount\": \"少许\", \"unit\": \"g\", \"note\": null, \"sort\": 1 }\n    ],\n    \"tips\": [\n      { \"id\": 41, \"recipeId\": 7, \"title\": \"鸡蛋更嫩\", \"content\": \"加几滴温水\", \"sort\": 1 }\n    ]\n  },\n  \"timestamp\": 1718000000000\n}"
+            }
+          ]
+        },
+        {
+          "name": "新增食谱",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json", "type": "text" },
+              { "key": "Accept", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categoryId\": 3,\n  \"name\": \"番茄炒蛋\",\n  \"subtitle\": \"国民下饭菜\",\n  \"coverUrl\": \"https://.../fqcd.jpg\",\n  \"description\": \"酸甜开胃，5 分钟出锅\",\n  \"cuisine\": \"川菜\",\n  \"taste\": \"酸甜\",\n  \"cookMethod\": \"炒\",\n  \"difficulty\": 1,\n  \"cookTime\": 5,\n  \"servings\": 2,\n  \"calories\": 320,\n  \"price\": 28.00,\n  \"originalPrice\": 32.00,\n  \"stock\": 50,\n  \"isRecommend\": 1,\n  \"status\": 1,\n  \"steps\": [\n    { \"stepNo\": 1, \"title\": \"备料\", \"content\": \"番茄切块、鸡蛋打散\", \"imageUrl\": null, \"duration\": 2, \"tip\": \"番茄去皮口感更好\" }\n  ],\n  \"ingredients\": [\n    { \"name\": \"番茄\", \"amount\": \"2 个\", \"unit\": \"个\", \"isMain\": 1, \"note\": \"熟透的更甜\", \"sort\": 1 },\n    { \"name\": \"鸡蛋\", \"amount\": \"3 个\", \"unit\": \"个\", \"isMain\": 1, \"note\": null, \"sort\": 2 }\n  ],\n  \"seasonings\": [\n    { \"name\": \"盐\", \"amount\": \"少许\", \"unit\": \"g\", \"note\": null, \"sort\": 1 }\n  ],\n  \"tips\": [\n    { \"title\": \"鸡蛋更嫩\", \"content\": \"加几滴温水\", \"sort\": 1 }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/recipes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "recipes"]
+            },
+            "description": "新增食谱（含烹饪步骤 / 食材 / 调料 / 技巧四类子表）"
+          },
+          "response": [
+            {
+              "name": "成功示例",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"code\": 200,\n  \"message\": \"新增成功\",\n  \"data\": { \"id\": 7 },\n  \"timestamp\": 1718000000000\n}"
+            }
+          ]
+        },
+        {
+          "name": "修改食谱",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json", "type": "text" },
+              { "key": "Accept", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": 7,\n  \"categoryId\": 3,\n  \"name\": \"番茄炒蛋（升级版）\",\n  \"subtitle\": \"国民下饭菜\",\n  \"coverUrl\": \"https://.../fqcd.jpg\",\n  \"description\": \"酸甜开胃，5 分钟出锅\",\n  \"cuisine\": \"川菜\",\n  \"taste\": \"酸甜\",\n  \"cookMethod\": \"炒\",\n  \"difficulty\": 1,\n  \"cookTime\": 5,\n  \"servings\": 2,\n  \"calories\": 320,\n  \"price\": 28.00,\n  \"originalPrice\": 32.00,\n  \"stock\": 50,\n  \"isRecommend\": 1,\n  \"status\": 1,\n  \"steps\": [\n    { \"stepNo\": 1, \"title\": \"备料\", \"content\": \"番茄切块、鸡蛋打散\", \"imageUrl\": null, \"duration\": 2, \"tip\": \"番茄去皮口感更好\" }\n  ],\n  \"ingredients\": [\n    { \"name\": \"番茄\", \"amount\": \"2 个\", \"unit\": \"个\", \"isMain\": 1, \"note\": \"熟透的更甜\", \"sort\": 1 }\n  ],\n  \"seasonings\": [\n    { \"name\": \"盐\", \"amount\": \"少许\", \"unit\": \"g\", \"note\": null, \"sort\": 1 }\n  ],\n  \"tips\": []\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/recipes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "recipes"]
+            },
+            "description": "修改食谱（子表全量替换；id 必填）"
+          },
+          "response": [
+            {
+              "name": "成功示例",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"code\": 200,\n  \"message\": \"操作成功\",\n  \"data\": null,\n  \"timestamp\": 1718000000000\n}"
+            }
+          ]
+        },
+        {
+          "name": "删除食谱",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Accept", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/recipes/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "recipes", ":id"],
+              "variable": [
+                { "key": "id", "value": "7", "description": "食谱 ID" }
+              ]
+            },
+            "description": "删除食谱（MyBatis-Plus 逻辑删除，deleted=1）"
+          },
+          "response": [
+            {
+              "name": "成功示例",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"code\": 200,\n  \"message\": \"操作成功\",\n  \"data\": null,\n  \"timestamp\": 1718000000000\n}"
+            }
+          ]
+        },
+        {
+          "name": "上架 / 下架",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Accept", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/recipes/:id/status?status=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "recipes", ":id", "status"],
+              "variable": [
+                { "key": "id", "value": "7", "description": "食谱 ID" }
+              ],
+              "query": [
+                { "key": "status", "value": "1", "description": "1上架 0下架" }
+              ]
+            },
+            "description": "上下架切换（status=1 上架，status=0 下架）"
+          },
+          "response": [
+            {
+              "name": "成功示例",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"code\": 200,\n  \"message\": \"操作成功\",\n  \"data\": null,\n  \"timestamp\": 1718000000000\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "分类管理",
+      "item": [
+        {
+          "name": "分类列表",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "categories"]
+            },
+            "description": "分类列表（启用 + 禁用全部返回）"
+          },
+          "response": [
+            {
+              "name": "成功示例",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"code\": 200,\n  \"message\": \"操作成功\",\n  \"data\": [\n    {\n      \"id\": 1,\n      \"name\": \"家常菜\",\n      \"parentId\": 0,\n      \"icon\": \"https://.../home.png\",\n      \"sort\": 1,\n      \"status\": 1,\n      \"createTime\": \"2026-01-01 00:00:00\",\n      \"updateTime\": \"2026-01-01 00:00:00\"\n    }\n  ],\n  \"timestamp\": 1718000000000\n}"
+            }
+          ]
+        },
+        {
+          "name": "新增分类",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json", "type": "text" },
+              { "key": "Accept", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"家常菜\",\n  \"parentId\": 0,\n  \"icon\": \"https://.../home.png\",\n  \"sort\": 1,\n  \"status\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "categories"]
+            },
+            "description": "新增食谱分类"
+          },
+          "response": [
+            {
+              "name": "成功示例",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"code\": 200,\n  \"message\": \"新增成功\",\n  \"data\": { \"id\": 1 },\n  \"timestamp\": 1718000000000\n}"
+            }
+          ]
+        },
+        {
+          "name": "修改分类",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json", "type": "text" },
+              { "key": "Accept", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": 1,\n  \"name\": \"家常菜（精选）\",\n  \"parentId\": 0,\n  \"icon\": \"https://.../home.png\",\n  \"sort\": 1,\n  \"status\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "categories"]
+            },
+            "description": "修改食谱分类（id 必填）"
+          },
+          "response": [
+            {
+              "name": "成功示例",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"code\": 200,\n  \"message\": \"操作成功\",\n  \"data\": null,\n  \"timestamp\": 1718000000000\n}"
+            }
+          ]
+        },
+        {
+          "name": "删除分类",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Accept", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/categories/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "categories", ":id"],
+              "variable": [
+                { "key": "id", "value": "1", "description": "分类 ID" }
+              ]
+            },
+            "description": "删除食谱分类（MyBatis-Plus 逻辑删除）。建议前端删除前提示该分类下是否仍有食谱。"
+          },
+          "response": [
+            {
+              "name": "成功示例",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"code\": 200,\n  \"message\": \"操作成功\",\n  \"data\": null,\n  \"timestamp\": 1718000000000\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "鉴权（辅助）",
+      "item": [
+        {
+          "name": "管理员登录（获取 token）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "登录接口必须使用 JSON Body（Content-Type: application/json），账号/密码放在 Body 中，不能放 URL 参数。\n默认测试账号：admin / admin123（来自 db/data.sql，role=1）。\n登录成功后将响应 data.token 复制到集合变量 token，即可调用后台接口。"
+          },
+          "response": [
+            {
+              "name": "成功示例",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"code\": 200,\n  \"message\": \"操作成功\",\n  \"data\": {\n    \"token\": \"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx\",\n    \"userId\": 1,\n    \"role\": 1\n  },\n  \"timestamp\": 1718000000000\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

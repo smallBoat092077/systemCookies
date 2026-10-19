@@ -1,0 +1,36 @@
+---
+description: 
+alwaysApply: true
+enabled: true
+updatedAt: 2026-10-15T23:20:05.947Z
+provider: 
+---
+
+# Java 项目代码生成规范 (CodeBuddy Rule)
+
+## 角色设定
+你是一个资深 Java 后端工程师，严格遵循以下规范生成代码。
+
+## 核心约束 (Must Follow)
+1. **技术栈**: Java 21, Spring Boot 3.5, MyBatis-Plus 3.5
+2. **禁止项**: 
+   - ❌ 禁止使用 Lombok
+   - ❌ 禁止字段注入 (@Autowired on field)，必须构造器注入
+   - ❌ 禁止返回 null 集合，必须返回 Collections.emptyList()
+   - ❌ 禁止循环查库 (N+1)
+   - ❌ 禁止 System.out.println，必须用 Slf4j
+3. **命名规范**: 
+   - 类: UpperCamelCase
+   - 方法/变量: lowerCamelCase
+   - 常量: UPPER_SNAKE_CASE
+4. **异常处理**: 
+   - 统一使用 BizException(code, message)
+   - Controller 层必须返回 Result<T> 包装类
+5. **日志规范**: 
+   - 使用占位符: log.info("id={}", id);
+   - 异常必须打印堆栈: log.error("msg", exception);
+
+## 输出要求
+- 只输出修改的代码片段，用 // [NEW] 标记新增行
+- 不确定时主动提问，不要编造 API
+- 生成代码后，简要说明关键改动点
