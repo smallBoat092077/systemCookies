@@ -78,3 +78,5 @@ app:
     api-key: ${DASHSCOPE_API_KEY:sk-145b4244c70f4bb59d6aa618750cf205}
     model: ${AI_MODEL:qwen-plus}
     base-url: ${AI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+    # 开启模型联网搜索：true 时模型可按需检索外部信息作答（需模型与账号支持 enable_search）
+    enable-search: ${AI_ENABLE_SEARCH:true}

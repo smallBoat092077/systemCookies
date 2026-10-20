@@ -59,21 +59,40 @@ public class AssistantServiceImpl implements AssistantService {
     /** 整轮对话留给大模型的时间预算，超出后不再调用工具，直接基于已有结果收尾 */
     private static final Duration AI_TIME_BUDGET = Duration.ofSeconds(35);
 
+    /** 真实性校验时拉取的在售菜单条数：必须覆盖全店，否则会把真菜误判成待上架 */
+    private static final int ON_SALE_MENU_SIZE = 200;
+
+    /** 回复里被书名号 / 引号包裹的疑似菜名 */
+    private static final Pattern QUOTED_DISH_PATTERN = Pattern.compile("[「《“\"']([^」》”\"']{2,12})[」》”\"']");
+
+    /** 提及未上架菜品时的改写话术 */
+    private static final String DISH_UNAVAILABLE_TIP = "「%s」还没上架呢，暂时不能点～我可以先推荐现在在售的招牌菜";
+
     private static final Pattern PHONE_PATTERN = Pattern.compile("(1[3-9]\\d{9})");
     private static final Pattern QUANTITY_PATTERN = Pattern.compile("(\\d+)\\s*(份|个|盘|碗|道)");
+
+    // 话术一致性判定用的三个特性：提到购物车、出现加购动词、出现完成态语气（排除「要加入购物车吗」这类问句）
+    private static final Pattern CART_QUESTION_PATTERN = Pattern.compile("吗|？|\\?|要不要|需要我|你说呢");
+    private static final Pattern CART_VERB_PATTERN = Pattern.compile("加入|加到|添加|加进|放进|放入|收进");
+    private static final Pattern DONE_MARK_PATTERN = Pattern.compile("已|成功|好了|啦|咯|已经");
 
     private static final String SYSTEM_PROMPT = """
             你是「点菜小助理」，服务于一家中式菜谱点菜小程序，帮用户用对话完成点餐。
             你可以调用这些工具：search_recipes 查菜谱、add_to_cart 加入购物车、view_cart 查看购物车、submit_order 下单。
             规则：
-            1. 用户说想吃什么，先用 search_recipes 找到菜品，再 add_to_cart。工具返回的「均在售」列表就是店里真实
-               可点的菜，用户点的菜名只要出现在这个列表里，就直接用它，绝不要说「没有这道菜 / 没备货」，
-               也不要自己编造菜品和价格。
+            1. 用户说「想吃什么 / 来一份某某」即视为确认加购：先用 search_recipes 找到菜品，再调用 add_to_cart，
+               不要反问用户要不要加。工具返回的「均在售」列表就是店里真实可点的菜，用户点的菜名只要出现在这个
+               列表里就直接用它，绝不要说「没有这道菜 / 没备货」，也不要自己编造菜品和价格。
+               没有真正调用 add_to_cart 之前，绝不能在回复里宣称已经加入成功。
             2. 用户说「下单 / 结算 / 就这些 / 买单」时：如果已经知道联系人姓名和手机号，立即调用 submit_order，
                不要再次确认；缺少哪一项就只问缺少的那一项，不要重复索要已有信息。
             3. 用户补上姓名和手机号（例如「张三，13800000001」）即视为确认下单，立即调用 submit_order。
             4. 回复用中文，简洁友好，单条不超过 80 字，不要用 Markdown。
             5. 能一次做完的事就一次做完，不要用「确认后我就提交」这类话把球踢回给用户。
+            6. 用户问到需要实时或外部信息的內容（天气、日期、新闻、忌口常识、某地口味偏好等）时，
+               可以联网检索后作答，不要以「我只负责点菜」为由拒绝；先把答案简短给出，再顺势推荐菜品。
+            7. 本店有没有这道菜、叫什么、多少钱，一律以 search_recipes 等工具返回的结果为准。
+            8. 回复里提到的每一个菜名都必须出自工具返回列表，包括联网检索到的菜谱也不能当作本店菜品推荐。
             """;
 
     /** 工具定义：OpenAI 兼容格式的 function calling */
@@ -144,6 +163,10 @@ public class AssistantServiceImpl implements AssistantService {
     @Value("${app.ai.base-url:https://dashscope.aliyuncs.com/compatible-mode/v1}")
     private String baseUrl;
 
+    /** 是否开启模型联网搜索：true 时模型可按需检索外部信息作答 */
+    @Value("${app.ai.enable-search:false}")
+    private boolean enableSearch;
+
     private final RecipeService recipeService;
     private final CartService cartService;
     private final OrderService orderService;
@@ -169,6 +192,10 @@ public class AssistantServiceImpl implements AssistantService {
             try {
                 reply = chatWithAi(userId, history);
                 reply.setMode("ai");
+                // 1) 提到的菜必须真的在售，否则改成「待上架」
+                reply = markUnavailableDishes(reply);
+                // 2) 兜底：模型可能在话术里承诺了加购却没有调用工具，保证话术与实际数据一致
+                reply = ensureCartClaimTrue(userId, dto.getMessage(), reply);
             } catch (Exception e) {
                 log.warn("AI 对话失败，降级本地规则引擎：{}", e.getMessage());
                 reply = chatLocal(userId, dto.getMessage());
@@ -221,6 +248,9 @@ public class AssistantServiceImpl implements AssistantService {
             body.put("tools", tools);
             body.put("tool_choice", "auto");
             body.put("temperature", 0.3);
+            if (enableSearch) {
+                body.put("enable_search", true);
+            }
 
             JsonNode response = postChat(body);
             JsonNode message = response.path("choices").path(0).path("message");
@@ -356,9 +386,9 @@ public class AssistantServiceImpl implements AssistantService {
     private String toolAddToCart(Long userId, JsonNode args, List<AssistantReplyVO.ActionVO> actions) {
         String recipeName = args.path("recipeName").asText("").trim();
         int quantity = Math.max(1, args.path("quantity").asInt(1));
-        RecipeListVO recipe = matchRecipe(recipeName);
+        RecipeListVO recipe = findStrictRecipe(recipeName);
         if (recipe == null) {
-            return "没有这道菜：" + recipeName + "，请换一个菜名或先看推荐。";
+            return String.format("本店暂时没上架「%s」，无法加入购物车。请换一道在售菜品，或先看招牌推荐。", recipeName);
         }
         CartAddDTO dto = new CartAddDTO();
         dto.setUserId(userId);
@@ -402,6 +432,127 @@ public class AssistantServiceImpl implements AssistantService {
         OrderVO order = orderService.getDetail(orderId, userId);
         actions.add(action("submitOrder", "下单成功", order.getOrderNo()));
         return "下单成功，订单号：" + order.getOrderNo();
+    }
+
+    /**
+     * 真实性校验：AI 回复里提到的菜必须真的在售。
+     * 联网检索开启后模型会自由推荐外部菜谱（甚至谎称「本店在售」），
+     * 这里把涉及未上架菜品的那一句整体改写为「待上架」提示，其余内容保留。
+     */
+    private AssistantReplyVO markUnavailableDishes(AssistantReplyVO reply) {
+        if (reply == null || !StringUtils.hasText(reply.getReply())) {
+            return reply;
+        }
+        List<RecipeListVO> onSaleMenu = queryRecipes(null, ON_SALE_MENU_SIZE);
+        List<String> unavailable = new ArrayList<>();
+        Matcher matcher = QUOTED_DISH_PATTERN.matcher(reply.getReply());
+        while (matcher.find()) {
+            String dish = matcher.group(1).trim();
+            if (isDishOnSale(onSaleMenu, dish) || unavailable.contains(dish)) {
+                continue;
+            }
+            unavailable.add(dish);
+        }
+        if (unavailable.isEmpty()) {
+            return reply;
+        }
+        String rewritten = reply.getReply();
+        for (String dish : unavailable) {
+            Pattern sentence = Pattern.compile("[^。！\\n；]{0,40}" + Pattern.quote(dish) + "[^。！\\n；]{0,40}");
+            rewritten = sentence.matcher(rewritten)
+                    .replaceAll(Matcher.quoteReplacement(String.format(DISH_UNAVAILABLE_TIP, dish)));
+        }
+        log.info("AI 提及未上架菜品 {}，已改写回复", unavailable);
+        reply.setReply(rewritten);
+        return reply;
+    }
+
+    /** 在售菜单里是否存在这道菜（支持「红烧肉」对「秘制红烧肉」的包含关系） */
+    private boolean isDishOnSale(List<RecipeListVO> onSaleMenu, String dishName) {
+        if (onSaleMenu.isEmpty()) {
+            // 菜单查不到时宁可不改话术，避免误伤正常回复
+            return true;
+        }
+        return onSaleMenu.stream().anyMatch(item -> sameDish(item.getName(), dishName));
+    }
+
+    private boolean sameDish(String menuName, String saidName) {
+        if (!StringUtils.hasText(menuName) || !StringUtils.hasText(saidName)) {
+            return false;
+        }
+        String menu = menuName.trim();
+        String said = saidName.trim();
+        return menu.equals(said) || menu.contains(said) || said.contains(menu);
+    }
+
+    /**
+     * 严格匹配菜名：matchRecipe 在找不到时可能模糊命中无关的菜，
+     * 这里再做一次同一性校验，保证「不在菜单里的菜」不会被加进购物车。
+     */
+    private RecipeListVO findStrictRecipe(String saidName) {
+        RecipeListVO hit = matchRecipe(saidName);
+        return hit != null && sameDish(hit.getName(), saidName) ? hit : null;
+    }
+
+    /**
+     * 判断回复是否向用户承诺了「已经加进购物车」。
+     * 用「提到购物车 + 加购动词 + 完成态语气」三项组合判定，而不是枚举固定话术，
+     * 因为模型的说法是自由的（已加入 / 已成功加入 / 加入购物车啦 ……），同时排除反问句。
+     */
+    private boolean claimsCartAdded(String text) {
+        // 按句拆分：避免句尾的追问（需要再点别的菜吗）干扰判断
+        for (String sentence : text.split("[。！\\n；]")) {
+            if (CART_QUESTION_PATTERN.matcher(sentence).find()) {
+                continue;
+            }
+            boolean hasVerb = CART_VERB_PATTERN.matcher(sentence).find();
+            boolean hasDone = DONE_MARK_PATTERN.matcher(sentence).find();
+            if (!hasVerb || !hasDone) {
+                continue;
+            }
+            if (sentence.contains("购物车")) {
+                return true;
+            }
+            // 「已为您加入宫保鸡丁一份」这类说法没提购物车，同样算承诺；但要排除「已为您找到 / 推荐」
+            return !sentence.contains("找到") && !sentence.contains("推荐");
+        }
+        return false;
+    }
+
+    /**
+     * 保证 AI 话术承诺与实际动作一致：
+     * 模型偶尔会在回复里说「已加入购物车」却没调用 add_to_cart，这里按用户原话补加；
+     * 连菜名都定位不到时，就把承诺改写成询问，不能让用户拿着空购物车以为下单成功。
+     */
+    private AssistantReplyVO ensureCartClaimTrue(Long userId, String userMessage, AssistantReplyVO reply) {
+        if (reply == null || !StringUtils.hasText(reply.getReply())) {
+            return reply;
+        }
+        List<AssistantReplyVO.ActionVO> actions =
+                reply.getActions() == null ? new ArrayList<>() : new ArrayList<>(reply.getActions());
+        boolean reallyAdded = actions.stream().anyMatch(item -> "addCart".equals(item.getType()));
+        if (reallyAdded || !claimsCartAdded(reply.getReply())) {
+            return reply;
+        }
+
+        RecipeListVO recipe = findStrictRecipe(userMessage);
+        if (recipe == null) {
+            log.warn("AI 承诺加购但无法定位菜品，原话：{}", userMessage);
+            reply.setReply("这道菜我还没加进购物车，你说一声我再帮你加上～");
+            reply.setActions(actions);
+            return reply;
+        }
+
+        int quantity = parseQuantity(userMessage);
+        CartAddDTO dto = new CartAddDTO();
+        dto.setUserId(userId);
+        dto.setRecipeId(recipe.getId());
+        dto.setQuantity(quantity);
+        cartService.addItem(dto);
+        log.info("AI 承诺加购但未调用工具，已补偿：recipeId={} quantity={}", recipe.getId(), quantity);
+        actions.add(action("addCart", "已加入购物车：" + recipe.getName() + " × " + quantity, null));
+        reply.setActions(actions);
+        return reply;
     }
 
     // ===================== 本地规则兜底 =====================
